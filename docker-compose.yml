@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/axiom
+      - TIMESCALE_URL=postgresql://postgres:postgres@timescaledb:5432/axiom_timeseries
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-for-development-replace-in-production}
+      - DEBUG=${DEBUG:-False}
+      - ALPACA_API_KEY=${ALPACA_API_KEY}
+      - ALPACA_API_SECRET=${ALPACA_API_SECRET}
+      - ALPACA_API_BASE_URL=${ALPACA_API_BASE_URL:-https://paper-api.alpaca.markets}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - postgres
+      - timescaledb
+      - redis
+    restart: unless-stopped
+    networks:
+      - axiom-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - axiom-network
+
+  postgres:
+    image: postgres:14-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=axiom
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - axiom-network
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg14
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=axiom_timeseries
+    volumes:
+      - timescaledb-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - axiom-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - axiom-network
+
+volumes:
+  postgres-data:
+  timescaledb-data:
+  redis-data:
+
+networks:
+  axiom-network:
+    driver: bridge
